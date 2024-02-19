@@ -14,13 +14,16 @@ This allows a broad flexibility to define custody, signing, recovery, and securi
 Because INTU accounts are dynamic, end-user accounts can evolve over time. Applications can now introduce new features and policies, encourage self-custody, sponsor gas, etc over time, rather than be limited by "starter" accounts at customer acquisition. 
 
 ## :tada: What is it?
-This repo will act as an automated signer to help you create Intu MPC accounts for your users.
+This repo will act as an automated co-signer to help your application or platform co-create Intu Accounts for your users.
 
 ## :rocket: Getting Started
 
 1. Clone the repo
 2. Rename the ```.env.example``` file to ```.env```
-3. In ```.env```file, Replace ```"signerprivatekey``` with a private key you control
+3. In ```.env```file, Replace ```"signerprivatekey"``` with a private key you control. This should be an EVM-compatible ECDSA private key.
+
+:no_entry: **USE A TEST PRIVATE KEY - DO NOT USE A PRIVATE KEY ACTIVELY USED ON MAINNET** :no_entry:
+
 4. Run ```npm i && npm start```
 
 
@@ -58,6 +61,7 @@ The end-user's device (SDK) will aggregate the partial signatures, and once form
 
 ### :question: Questions? 
 :email: <dev@intu.xyz> :email:
+
 [🏮 discord 🏮](https://discord.gg/sc9SjTewph)
 
 ### License
