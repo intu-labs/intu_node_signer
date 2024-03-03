@@ -14,7 +14,7 @@ import ContractInfos from "@intuweb3/exp-node/lib/services/web3/contracts/contra
 import { ethers } from "ethers";
 import "dotenv/config";
 
-const provider = new ethers.providers.JsonRpcProvider("https://testnet.skalenodes.com/v1/giant-half-dual-testnet");
+const provider = new ethers.providers.JsonRpcProvider("https://testnet.skalenodes.com/v1/juicy-low-small-testnet");
 
 async function createSigner(key: string): Promise<ethers.Signer> {
   const wallet = new ethers.Wallet(key);
@@ -74,7 +74,7 @@ async function keepCheckingUntilTrue(vaultAddress, userAddress): Promise<boolean
     }
   });
 
-  let contractAddress = ContractInfos(974399131).VaultFactory.address;
+  let contractAddress = ContractInfos(1444673419).VaultFactory.address;
   const contract = new ethers.Contract(contractAddress, VaultFactoryJson.abi, provider);
   contract.on("VaultCreated", (vaultAddress) => {
     //create new event listener to sign transactions
@@ -88,7 +88,7 @@ async function keepCheckingUntilTrue(vaultAddress, userAddress): Promise<boolean
               try {
                 const result = await keepCheckingUntilTrue(vaultAddress, users[2].address);
                 if (result) {
-                  await sleep(10000); //need to await the primary user's data being in the db, this is a SKALE blocktime
+                  await sleep(5000); //need to await the primary user's data being in the db, this is a SKALE blocktime
                   try {
                     await automateRegistration(vaultAddress, nodeAddress, signer).then(async (result) => {
                       let isRegistered = await getUserRegistrationAllInfos(vaultAddress, nodeAddress, provider);
