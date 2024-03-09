@@ -15,6 +15,10 @@ import { ethers } from "ethers";
 import "dotenv/config";
 
 const provider = new ethers.providers.JsonRpcProvider("https://testnet.skalenodes.com/v1/juicy-low-small-testnet");
+//const provider = new ethers.providers.JsonRpcProvider("https://sepolia.drpc.org");
+
+const chainId = 1444673419; //this is skale testnet endpoint
+//const chainId = 11155111; //sepolia
 
 async function createSigner(key: string): Promise<ethers.Signer> {
   const wallet = new ethers.Wallet(key);
@@ -31,7 +35,7 @@ async function keepCheckingUntilTrue(vaultAddress, userAddress): Promise<boolean
   console.log("checking if user is preregistered");
   let done: boolean = false;
   while (!done) {
-    await sleep(5000);
+    await sleep(3000);
     await getUserPreRegisterInfos(vaultAddress, userAddress, provider)
       .then((result) => {
         if (result && result.registered) {
@@ -40,11 +44,11 @@ async function keepCheckingUntilTrue(vaultAddress, userAddress): Promise<boolean
       })
       .catch((err) => console.log(err));
   }
+  console.log("DONE! ");
   return done;
 }
 
 (async () => {
-  //create listener
   const signer = await createSigner(process.env.SIGNER || "0x0000000000000000000000000000000000000000");
   const nodeAddress = await signer.getAddress();
   console.log("nodeaddress : " + nodeAddress + " ready");
@@ -54,6 +58,7 @@ async function keepCheckingUntilTrue(vaultAddress, userAddress): Promise<boolean
       if (property === "length") {
         let vaultAddress = arrayOfVaults[arrayOfVaults.length - 1];
         const contract = new ethers.Contract(vaultAddress, VaultJson.abi, provider);
+        console.log("new transaction event listener for : " + vaultAddress);
         contract.on("TransactionProposed", (txId, transactionInfo) => {
           signTx(vaultAddress, txId, signer).then(async (res) => {
             console.log("signing complete");
@@ -68,13 +73,16 @@ async function keepCheckingUntilTrue(vaultAddress, userAddress): Promise<boolean
     },
   });
 
+  //setup transaction event listeners as soon as as the node is created
   _getFilteredUserInitializedLogs(nodeAddress, provider).then((res) => {
     if (res && res.length > 0) {
+      console.log(res.length);
+      console.log(res);
       addTransactionEventListener.push(res[res.length - 1]);
     }
   });
 
-  let contractAddress = ContractInfos(1444673419).VaultFactory.address;
+  let contractAddress = ContractInfos(chainId).VaultFactory.address;
   const contract = new ethers.Contract(contractAddress, VaultFactoryJson.abi, provider);
   contract.on("VaultCreated", (vaultAddress) => {
     //create new event listener to sign transactions
@@ -87,15 +95,14 @@ async function keepCheckingUntilTrue(vaultAddress, userAddress): Promise<boolean
             .then(async () => {
               try {
                 const result = await keepCheckingUntilTrue(vaultAddress, users[2].address);
+                console.log(result ? "true" : "false");
                 if (result) {
-                  await sleep(5000); //need to await the primary user's data being in the db, this is a SKALE blocktime
+                  //await sleep(10000); //need to await the primary user's data being in the db, this is a SKALE blocktime
                   try {
+                    console.log("robotautoregistering");
                     await automateRegistration(vaultAddress, nodeAddress, signer).then(async (result) => {
-                      let isRegistered = await getUserRegistrationAllInfos(vaultAddress, nodeAddress, provider);
-                      console.log("registered: " + isRegistered.registered);
-                      if (isRegistered.registered === false) {
-                        await registerAllSteps(vaultAddress, signer);
-                      }
+                      await registerAllSteps(vaultAddress, signer);
+                      //}
                     });
                   } catch (error) {
                     console.log(error);
