@@ -6,19 +6,26 @@ import {
   getUserPreRegisterInfos,
   registerAllSteps,
   signTx,
-  _getFilteredUserInitializedLogs,
+  getFilteredUserInitializedLogs,
+  automateRotateRegistration,
+  registerAllReshareSteps,
+  getProposedUser,
+  createSeed
 } from "@intuweb3/exp-node";
-import VaultFactoryJson from "@intuweb3/exp-node/lib/services/web3/contracts/abi/VaultFactory.json";
-import VaultJson from "@intuweb3/exp-node/lib/services/web3/contracts/abi/Vault.json";
-import ContractInfos from "@intuweb3/exp-node/lib/services/web3/contracts/contractInfos";
+import VaultFactoryJson from "@intuweb3/exp-node/services/web3/contracts/abi/VaultFactory.json";
+import VaultJson from "@intuweb3/exp-node/services/web3/contracts/abi/Vault.json";
+import ContractInfos from "@intuweb3/exp-node/services/web3/contracts/contractInfos.js";
 import { ethers } from "ethers";
 import "dotenv/config";
 
-const provider = new ethers.providers.JsonRpcProvider("https://testnet.skalenodes.com/v1/juicy-low-small-testnet");
-//const provider = new ethers.providers.JsonRpcProvider("https://sepolia.drpc.org");
-
-const chainId = 1444673419; //this is skale testnet endpoint
-//const chainId = 11155111; //sepolia
+const provider = new ethers.providers.JsonRpcProvider(process.env.RPC_URL);
+const networkInfo = await provider.getNetwork();
+const chainId = await networkInfo.chainId;
+const blockTime = 12000; //sepolia
+let blockRange = 500000; //rpc restrictions sometimes
+if (await chainId == 1891 || chainId == 1444673419) {
+  blockRange = 2000; //for lightlink and another
+}
 
 async function createSigner(key: string): Promise<ethers.Signer> {
   const wallet = new ethers.Wallet(key);
@@ -35,7 +42,7 @@ async function keepCheckingUntilTrue(vaultAddress, userAddress): Promise<boolean
   console.log("checking if user is preregistered");
   let done: boolean = false;
   while (!done) {
-    await sleep(3000);
+    await sleep(blockTime); //sepolia
     await getUserPreRegisterInfos(vaultAddress, userAddress, provider)
       .then((result) => {
         if (result && result.registered) {
@@ -52,73 +59,76 @@ async function keepCheckingUntilTrue(vaultAddress, userAddress): Promise<boolean
   const signer = await createSigner(process.env.SIGNER || "0x0000000000000000000000000000000000000000");
   const nodeAddress = await signer.getAddress();
   console.log("nodeaddress : " + nodeAddress + " ready");
+  const contractAddress = ContractInfos(chainId).VaultFactory.address;
+  const contract = new ethers.Contract(contractAddress, VaultFactoryJson.abi, provider);
 
   const addTransactionEventListener = new Proxy(arrayOfVaults, {
     set: function (target, property, value) {
-      if (property === "length") {
-        let vaultAddress = arrayOfVaults[arrayOfVaults.length - 1];
+      if (value.length > 5) {
+        let vaultAddress = value;
+        console.log(arrayOfVaults)
         const contract = new ethers.Contract(vaultAddress, VaultJson.abi, provider);
         console.log("new transaction event listener for : " + vaultAddress);
-        contract.on("TransactionProposed", (txId, transactionInfo) => {
-          signTx(vaultAddress, txId, signer).then(async (res) => {
+
+      contract.on("TransactionProposed", (txId) => {
+          console.log("signingTx")
+          
+        signTx(vaultAddress, txId, signer, "", blockRange).then(async (res) => {
             console.log("signing complete");
           });
         }),
-          (error) => {
+          (error:any) => {
             console.error(error);
           };
       }
-      target[property] = value;
+      //target[property] = value;
       return true;
     },
   });
 
   //setup transaction event listeners as soon as as the node is created
-  _getFilteredUserInitializedLogs(nodeAddress, provider).then((res) => {
+  getFilteredUserInitializedLogs(nodeAddress, provider).then((res) => {
     if (res && res.length > 0) {
-      console.log(res.length);
-      console.log(res);
+      //console.log(res.length);
+      //console.log(res);
       addTransactionEventListener.push(res[res.length - 1]);
     }
   });
 
-  let contractAddress = ContractInfos(chainId).VaultFactory.address;
-  const contract = new ethers.Contract(contractAddress, VaultFactoryJson.abi, provider);
-  contract.on("VaultCreated", (vaultAddress) => {
+
+
+  contract.on("VaultCreated", (vaultAddress, proposedAddresses) => {
     //create new event listener to sign transactions
-    addTransactionEventListener.push(vaultAddress);
-    getVault(vaultAddress, provider).then(async (result) => {
-      let users = result.users;
-      for (let i = 0; i < users.length; i++)
-        if (users[i].address === nodeAddress) {
+    console.log("new vault created : " + vaultAddress);
+    if(proposedAddresses.includes(nodeAddress)) {
+      console.log("add to addresses of vault I'm a part of")
+      addTransactionEventListener.push(vaultAddress);
+    }
+      getVault(vaultAddress, provider, blockRange).then(async (result) => {
+        let users = result.users;
+        const nodeUser = users.find(user => user.address === nodeAddress);
+        if (nodeUser) {
+          console.log("Node user found");
           preRegistration(vaultAddress, signer)
             .then(async () => {
-              try {
-                const result = await keepCheckingUntilTrue(vaultAddress, users[2].address);
-                console.log(result ? "true" : "false");
-                if (result) {
-                  //await sleep(10000); //need to await the primary user's data being in the db, this is a SKALE blocktime
-                  try {
-                    console.log("robotautoregistering");
-                    await automateRegistration(vaultAddress, nodeAddress, signer).then(async (result) => {
-                      await registerAllSteps(vaultAddress, signer);
-                      //}
-                    });
-                  } catch (error) {
-                    console.log(error);
-                  }
-                }
-              } catch (error) {
-                console.error("Error occurred:", error);
-              }
+          console.log("preregistration complete");
+            const result = await keepCheckingUntilTrue(vaultAddress, nodeUser.address);
+            if (result) {
+            console.log("robotautoregistering - initial registration");
+            const latestBlock = await provider.getBlockNumber();
+            await sleep(blockTime);
+            await automateRegistration(vaultAddress, nodeAddress, signer, blockRange, latestBlock-100).then(async (result) => {
+              console.log("registering all steps");
+              await registerAllSteps(vaultAddress, signer);
+              console.log("Node registration complete")
+            });
+            }
             })
             .catch((error) => {
-              console.error(error);
+          console.error(error);
             });
-        } else {
-          //console.log("no match, do nothing");
         }
-    });
+      });
   }),
     (error) => {
       console.error(error);
