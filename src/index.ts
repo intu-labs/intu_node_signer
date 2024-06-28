@@ -10,22 +10,15 @@ import {
   automateRotateRegistration,
   registerAllReshareSteps,
   getProposedUser,
-  createSeed
 } from "@intuweb3/exp-node";
-import VaultFactoryJson from "@intuweb3/exp-node/services/web3/contracts/abi/VaultFactory.json";
-import VaultJson from "@intuweb3/exp-node/services/web3/contracts/abi/Vault.json";
-import ContractInfos from "@intuweb3/exp-node/services/web3/contracts/contractInfos.js";
+import VaultFactoryJson from "@intuweb3/exp-node/lib/services/web3/contracts/abi/VaultFactory.json";
+import VaultJson from "@intuweb3/exp-node/lib/services/web3/contracts/abi/Vault.json";
+import ContractInfos from "@intuweb3/exp-node/lib/services/web3/contracts/contractInfos.js";
 import { ethers } from "ethers";
 import "dotenv/config";
 
 const provider = new ethers.providers.JsonRpcProvider(process.env.RPC_URL);
-const networkInfo = await provider.getNetwork();
-const chainId = await networkInfo.chainId;
 const blockTime = 12000; //sepolia
-let blockRange = 500000; //rpc restrictions sometimes
-if (await chainId == 1891 || chainId == 1444673419) {
-  blockRange = 2000; //for lightlink and another
-}
 
 async function createSigner(key: string): Promise<ethers.Signer> {
   const wallet = new ethers.Wallet(key);
@@ -56,6 +49,13 @@ async function keepCheckingUntilTrue(vaultAddress, userAddress): Promise<boolean
 }
 
 (async () => {
+const networkInfo = await provider.getNetwork();
+const chainId = await networkInfo.chainId;
+let blockRange = 500000; //rpc restrictions sometimes
+if (await chainId == 1891 || chainId == 1444673419) {
+  blockRange = 2000; //for lightlink and another
+}
+
   const signer = await createSigner(process.env.SIGNER || "0x0000000000000000000000000000000000000000");
   const nodeAddress = await signer.getAddress();
   console.log("nodeaddress : " + nodeAddress + " ready");
