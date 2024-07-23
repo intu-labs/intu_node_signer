@@ -17,7 +17,7 @@
   "author": "",
   "license": "ISC",
   "dependencies": {
-    "@intuweb3/exp-node": "^0.99.83",
+    "@intuweb3/exp-node": "^0.99.85",
     "dotenv": "^16.4.5",
     "dotenv-webpack": "^8.1.0",
     "ethers": "^5.7.2"
