@@ -24,7 +24,7 @@ This repo will act as an automated co-signer to help your application or platfor
 
 :no_entry: **USE A TEST PRIVATE KEY - DO NOT USE A PRIVATE KEY ACTIVELY USED ON MAINNET** :no_entry:
 
-4. Run ```npm i && npm start```
+4. Run ```npm i && npm run allwebpack```
 
 
 ### :alien: Why SKALE?
