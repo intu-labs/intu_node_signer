@@ -124,10 +124,9 @@ if (await chainId == 1891 || chainId == 1444673419) {
             console.log("robotautoregistering - initial registration");
             const latestBlock = await provider.getBlockNumber();
             await sleep(blockTime);
-            await automateRegistration(vaultAddress, nodeAddress, signer, blockRange, latestBlock-100).then(async (result) => {
+            await automateRegistration(vaultAddress, nodeAddress, signer, blockRange).then(async (result) => {
               console.log("registering all steps");
               await registerAllSteps(vaultAddress, signer);
-              console.log("Node registration complete")
             });
             }
             })
