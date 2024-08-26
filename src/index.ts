@@ -107,7 +107,9 @@ async function keepCheckingUntilTrue(vaultAddress:any, userAddress:any): Promise
       let eventJson = JSON.parse(event.data);
       if (eventJson.confirmed === false) {
          const newVaultAddress = "0x" + eventJson.logs[0].topic1.slice(26);
-         return {newVaultAddress};
+         //todo get proposedAddresses
+         let proposedAddresses: any[] = [];
+         eventEmitter.emit("VaultCreated", [newVaultAddress,proposedAddresses]);
       }
     }; 
   }
