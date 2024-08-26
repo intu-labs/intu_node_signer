@@ -114,6 +114,16 @@ async function keepCheckingUntilTrue(vaultAddress:any, userAddress:any): Promise
     }; 
   }
 
+  //Function to check if user is valid/good/safe/etc
+  const checkUserStatus = async (userAddress:string): Promise<boolean> => {
+    let apiCheck = `https://somewhere.xyz/${userAddress}`;
+    let response = await fetch(apiCheck);
+    if (response) { // some other logic based on whatever we are checking
+      return false;
+    }
+    return true;
+  }
+
 
   //~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~//
   //~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~ Put it all together ~~~~~~~~~~~~~~~~~~~~~~~~~~//
@@ -150,10 +160,13 @@ async function keepCheckingUntilTrue(vaultAddress:any, userAddress:any): Promise
   //  };
 
   const listenForNewVaultsAndRegister = async () => {
-    eventEmitter.on('VaultCreated', (res:any) => {
+    eventEmitter.on('VaultCreated', async (res:any) => {
       const newVaultAddress = res[0];
       const proposedAddresses = res[1];
       console.log("new vault created : " + newVaultAddress);
+      //first lets add a check to see if user is safe:
+      const isValidUser = await checkUserStatus(proposedAddresses[2]);
+      isValidUser ? true : (() => { throw new Error('User Validation Check is false'); })();
       addNewAddressToArray(newVaultAddress, proposedAddresses);
         const nodeUser = proposedAddresses.find((user: any) => user.address === nodeAddress);
         if (nodeUser) {
