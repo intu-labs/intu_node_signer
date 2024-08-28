@@ -1,11 +1,8 @@
 import {
   preRegistration,
   automateRegistration,
-  getVault,
-  getUserRegistrationAllInfos,
   getUserPreRegisterInfos,
   registerAllSteps,
-  signTx,
   signTxWithoutLambda,
   getFilteredUserInitializedLogs,
   automateRotateRegistration,
@@ -19,14 +16,13 @@ import ContractInfos from "@intuweb3/exp-node/services/web3/contracts/contractIn
 import { ethers } from "ethers";
 import "dotenv/config";
 
-const provider = new ethers.providers.StaticJsonRpcProvider({url:"https://arbitrum-mainnet.infura.io/v3/" + process.env.INFURA_API_KEY,skipFetchSetup:true});
-//const provider = new ethers.providers.StaticJsonRpcProvider({url:"https://arbitrum-sepolia.infura.io/v3/______",skipFetchSetup:true});
-
+const provider = new ethers.providers.StaticJsonRpcProvider({url:"https://arbitrum-mainnet.infura.io/v3/f0b33e4b953e4306b6d5e8b9f9d51567",skipFetchSetup:true});
+//const provider = new ethers.providers.StaticJsonRpcProvider({url:"https://sepolia.infura.io/v3/8f11968261f5401ba9391b5dc629ddfd",skipFetchSetup:true});
 const EventEmitter = require('events');
 const eventEmitter = new EventEmitter();
 
   //~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~//
-  //~~~~~~~~~~~~~~~~~~~~~~~~~~~~~ Initial functions / helper functions ~~~~~~~~~~//
+  //~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~ Initial functions / helper functions ~~~~~~~~~~~~~~~~~~~~~~~~~~//
   //~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~//
 
 const sleeptime = 1000;
@@ -46,7 +42,6 @@ function sleep(delay:any) {
 }
 
 async function keepCheckingUntilTrue(vaultAddress:any, userAddress:any): Promise<boolean> {
-  console.log("checking if user is preregistered : " + userAddress);
   let done: boolean = false;
   while (!done) {
     await sleep(sleeptime);
@@ -58,7 +53,6 @@ async function keepCheckingUntilTrue(vaultAddress:any, userAddress:any): Promise
       })
       .catch((err:any) => console.log(err));
   }
-  console.log("DONE!");
   return done;
 }
 
@@ -101,27 +95,16 @@ async function keepCheckingUntilTrue(vaultAddress:any, userAddress:any): Promise
   const subscribeToMoralisEvents = async () => {
     const socket = new WebSocket('wss://intudrip.xyz/ws');
     socket.onopen = () => {
-        //console.log('Connected to WebSocket server'); // this just confirms things are good
+        console.log('Connected to WebSocket server');
+        // this just confirms things are good
     };
     socket.onmessage = (event) => {
       let eventJson = JSON.parse(event.data);
       if (eventJson.confirmed === false) {
          const newVaultAddress = "0x" + eventJson.logs[0].topic1.slice(26);
-         //todo get proposedAddresses
-         let proposedAddresses: any[] = [];
-         eventEmitter.emit("VaultCreated", [newVaultAddress,proposedAddresses]);
+         eventEmitter.emit("VaultCreated", [newVaultAddress]);
       }
     }; 
-  }
-
-  //Function to check if user is valid/good/safe/etc
-  const checkUserStatus = async (userAddress:string): Promise<boolean> => {
-    let apiCheck = `https://somewhere.xyz/${userAddress}`;
-    let response = await fetch(apiCheck);
-    if (response) { // some other logic based on whatever we are checking
-      return false;
-    }
-    return true;
   }
 
 
@@ -129,44 +112,11 @@ async function keepCheckingUntilTrue(vaultAddress:any, userAddress:any): Promise
   //~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~ Put it all together ~~~~~~~~~~~~~~~~~~~~~~~~~~//
   //~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~//
 
-  /* This is the old function - works, but needs to be more modular for user development */
-  //contract.on("VaultCreated", async (vaultAddress, proposedAddresses) => {
-  //  console.log("new vault created : " + vaultAddress);
-  //  addNewAddressToArray(vaultAddress, proposedAddresses)
-  //  getVault(vaultAddress, provider, blockRange).then(async (result:any) => {
-  //    let users = result.users;
-  //    const nodeUser = users.find((user: any) => user.address === nodeAddress);
-  //    if (nodeUser) {
-  //      console.log("Node address found in  " + vaultAddress);
-  //      preRegistration(vaultAddress, signer)
-  //        .then(async () => {
-  //          console.log("preregistration complete - performing final registration now");
-  //            await sleep(sleeptime); //we assume user is done pre-registering by now, otherwise automateRegistration will fail
-  //            await automateRegistration(vaultAddress, nodeAddress, signer, blockRange).then(async () => {
-  //              console.log("registering all steps");
-  //              await sleep(sleeptime);
-  //            await registerAllSteps(vaultAddress, signer);
-  //              console.log("all steps registered");
-  //            });
-  //        })
-  //        .catch((error:any) => {
-  //      console.error(error);
-  //        });
-  //    }
-  //  });
-  //}),
-  //  (error:any) => {
-  //    console.error(error);
-  //  };
-
-  const listenForNewVaultsAndRegister = async () => {
-    eventEmitter.on('VaultCreated', async (res:any) => {
+  const listenForNewVaults = async () => {
+    eventEmitter.on('VaultCreated', (res:any) => {
       const newVaultAddress = res[0];
       const proposedAddresses = res[1];
       console.log("new vault created : " + newVaultAddress);
-      //first lets add a check to see if user is safe:
-      const isValidUser = await checkUserStatus(proposedAddresses[2]);
-      isValidUser ? true : (() => { throw new Error('User Validation Check is false'); })();
       addNewAddressToArray(newVaultAddress, proposedAddresses);
         const nodeUser = proposedAddresses.find((user: any) => user.address === nodeAddress);
         if (nodeUser) {
@@ -188,6 +138,10 @@ async function keepCheckingUntilTrue(vaultAddress:any, userAddress:any): Promise
         }
     });
   }
+
+  await subscribeToVaultCreatedEvents();
+  //await subscribeToMoralisEvents();
+  await listenForNewVaults();
 
 
   //~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~//
@@ -330,10 +284,5 @@ async function keepCheckingUntilTrue(vaultAddress:any, userAddress:any): Promise
       addEventListenersForRotationAndTransaction.push(res[res.length - 1]);
     }
   });
-
-  //~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~ RUN THINGS ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~//
-  
-  subscribeToVaultCreatedEvents();
-  listenForNewVaultsAndRegister();
 
 })();
