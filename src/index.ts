@@ -121,17 +121,15 @@ async function keepCheckingUntilTrue(vaultAddress:any, userAddress:any): Promise
   //~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~ Put it all together ~~~~~~~~~~~~~~~~~~~~~~~~~~//
   //~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~//
 
-  const listenForNewVaultsAndRegister = async () => {
-    eventEmitter.on('VaultCreated', async (res:any) => {
+  const listenForNewVaults = async () => {
+    eventEmitter.on('VaultCreated', (res:any) => {
       const newVaultAddress = res[0];
       const proposedAddresses = res[1];
       console.log("new vault created : " + newVaultAddress);
-      //first lets add a check to see if user is safe:
-      const isValidUser = await checkUserStatus(proposedAddresses[2]);
-      isValidUser ? true : (() => { throw new Error('User Validation Check is false'); })();
+
       addNewAddressToArray(newVaultAddress, proposedAddresses);
-        const nodeUser = proposedAddresses.find((user: any) => user.address === nodeAddress);
-        if (nodeUser) {
+      const isMatch = proposedAddresses.includes(nodeAddress);
+        if (isMatch) {
           console.log("Node address found in  " + newVaultAddress);
           preRegistration(newVaultAddress, signer)
             .then(async () => {
