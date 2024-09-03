@@ -16,8 +16,8 @@ import ContractInfos from "@intuweb3/exp-node/services/web3/contracts/contractIn
 import { ethers } from "ethers";
 import "dotenv/config";
 
-const provider = new ethers.providers.StaticJsonRpcProvider({url:"https://arbitrum-mainnet.infura.io/v3/f0b33e4b953e4306b6d5e8b9f9d51567",skipFetchSetup:true});
-//const provider = new ethers.providers.StaticJsonRpcProvider({url:"https://sepolia.infura.io/v3/8f11968261f5401ba9391b5dc629ddfd",skipFetchSetup:true});
+const provider = new ethers.providers.StaticJsonRpcProvider({url:"https://arbitrum-mainnet.infura.io/v3/",skipFetchSetup:true});
+//const provider = new ethers.providers.StaticJsonRpcProvider({url:"https://sepolia.infura.io/v3/",skipFetchSetup:true});
 const EventEmitter = require('events');
 const eventEmitter = new EventEmitter();
 
