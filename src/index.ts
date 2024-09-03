@@ -151,7 +151,7 @@ async function keepCheckingUntilTrue(vaultAddress:any, userAddress:any): Promise
 
   await subscribeToVaultCreatedEvents();
   //await subscribeToMoralisEvents();
-  await listenForNewVaultsAndRegister();
+  await listenForNewVaults();
 
 
   //~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~//
