@@ -17,23 +17,30 @@
   "author": "",
   "license": "ISC",
   "dependencies": {
-    "@intuweb3/exp-node": "^0.99.85",
-    "dotenv": "^16.4.5",
-    "dotenv-webpack": "^8.1.0",
-    "ethers": "^5.7.2"
-  },
-  "devDependencies": {
+    "@intuweb3/exp-node": "^0.99.877",
     "assert-browserify": "^2.0.0",
-    "buffer-browserify": "^0.2.5",
+    "buffer": "^6.0.3",
     "crypto-browserify": "^3.12.0",
-    "file-loader": "^6.2.0",
+    "dotenv": "^16.4.5",
+    "esm": "^3.2.25",
+    "ethers": "^5.7.2",
+    "http": "^0.0.1-security",
+    "mock-socket": "^9.3.1",
+    "nostr-tools": "^2.7.0",
     "os-browserify": "^0.3.0",
     "path-browserify": "^1.0.1",
+    "server": "^1.0.38",
     "stream-browserify": "^3.0.0",
+    "viem": "^2.21.15",
+    "vm-browserify": "^1.1.2",
+    "ws": "^8.17.1"
+  },
+  "devDependencies": {
+    "@types/node": "^20.14.10",
+    "file-loader": "^6.2.0",
     "ts-loader": "^9.5.1",
     "typescript": "^5.5.3",
-    "vm-browserify": "^1.1.2",
-    "webpack": "^5.92.3",
+    "webpack": "^5.92.1",
     "webpack-cli": "^5.1.4"
   }
 }
