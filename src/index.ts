@@ -1,8 +1,9 @@
+import { createPublicClient, createWalletClient, http, webSocket } from "viem";
+import { arbitrumSepolia, arbitrum } from "viem/chains";
+import { privateKeyToAccount } from "viem/accounts";
 import {
   preRegistration,
   automateRegistration,
-  getVault,
-  getUserRegistrationAllInfos,
   getUserPreRegisterInfos,
   registerAllSteps,
   signTx,
@@ -10,133 +11,322 @@ import {
   automateRotateRegistration,
   registerAllReshareSteps,
   getProposedUser,
-  getUniqueHashFromSignature,
-  createSeed
+  createSeed,
 } from "@intuweb3/exp-node";
-import VaultFactoryJson from "@intuweb3/exp-node/lib/services/web3/contracts/abi/VaultFactory.json";
-import VaultJson from "@intuweb3/exp-node/lib/services/web3/contracts/abi/Vault.json";
-import ContractInfos from "@intuweb3/exp-node/lib/services/web3/contracts/contractInfos.js";
+import VaultFactoryJson from "@intuweb3/exp-node/services/web3/contracts/abi/VaultFactory.json";
+import VaultJson from "@intuweb3/exp-node/services/web3/contracts/abi/Vault.json";
+import ContractInfos from "@intuweb3/exp-node/services/web3/contracts/contractInfos.js";
+import "dotenv/config";
 import { ethers } from "ethers";
-require('dotenv').config();
 
-//const provider = new ethers.providers.StaticJsonRpcProvider("https://sepolia.infura.io/v3/f0b33e4b953e4306b6d5e8b9f9d51567");
-const provider = new ethers.providers.StaticJsonRpcProvider({url: process.env.RPC_URL || "",skipFetchSetup:true});
+const EventEmitter = require("events");
+const eventEmitter = new EventEmitter();
+const sleeptime = 1500;
+let blockRange = 100000;
+let arrayOfVaults: any[] = [];
+let special: `0x${string}` = `0x${process.env.SIGNER}`;
+let rpcURL = `https://arbitrum-sepolia.infura.io/v3/${process.env.INFURA_KEY}`;
+let wsURL = `wss://arbitrum-sepolia.infura.io/ws/v3/${process.env.INFURA_KEY}`;
+//let rpcURL = `https://arbitrum-mainnet.infura.io/v3/${process.env.INFURA_KEY}`;
 
-const blockTime = 12000; //sepolia
+const publicClient = createPublicClient({
+  chain: arbitrumSepolia,
+  transport: http(rpcURL),
+});
+
+const wsPublicClient = createPublicClient({
+  chain: arbitrumSepolia,
+  transport: webSocket(wsURL),
+});
+
+const account = privateKeyToAccount(special);
+let walletClient = createWalletClient({
+  account,
+  chain: arbitrumSepolia,
+  transport: http(rpcURL),
+});
+
+const ethersProvider = new ethers.providers.StaticJsonRpcProvider({
+  url: rpcURL,
+  skipFetchSetup: true,
+});
+
+function sleep(delay: number) {
+  return new Promise((resolve) => setTimeout(resolve, delay));
+}
 
 async function createSigner(key: string): Promise<ethers.Signer> {
   const wallet = new ethers.Wallet(key);
-  const signer = wallet.connect(provider);
+  const signer = await wallet.connect(ethersProvider);
   return signer;
 }
 
-function sleep(delay:any) {
-  return new Promise((resolve) => setTimeout(resolve, delay));
-}
-let arrayOfVaults: any[] = [];
-
-async function keepCheckingUntilTrue(vaultAddress:any, userAddress:any): Promise<boolean> {
-  console.log("checking if user is preregistered");
-  let done: boolean = false;
-  while (!done) {
-    await sleep(blockTime); //sepolia
-    await getUserPreRegisterInfos(vaultAddress, userAddress, provider)
-      .then((result) => {
+async function keepCheckingUntilTrue(
+  vaultAddress: string,
+  userAddress: string
+): Promise<boolean> {
+  let retries = 0;
+  let maxRetries = 30;
+  while (retries < maxRetries) {
+    let done: boolean = false;
+    while (!done) {
+      await sleep(sleeptime);
+      try {
+        const result = await getUserPreRegisterInfos(
+          vaultAddress,
+          userAddress,
+          ethersProvider
+        );
         if (result && result.registered) {
           done = true;
         }
-      })
-      .catch((err) => console.log(err)); 
+        retries++;
+      } catch (err) {
+        console.log(err);
+      }
+    }
+    return done;
   }
-  console.log("DONE! ");
-  return done;
+  return false;
 }
 
 (async () => {
-const networkInfo = await provider.getNetwork();
-const chainId = await networkInfo.chainId;
-let blockRange = 500000; //rpc restrictions sometimes
-if (await chainId == 1891 || chainId == 1444673419) {
-  blockRange = 2000; //for lightlink and another
-}
+  const ethersSigner = await createSigner(
+    process.env.SIGNER || "0x0000000000000000000000000000000000000000"
+  );
 
-  const signer = await createSigner(process.env.SIGNER || "0x0000000000000000000000000000000000000000");
-  const nodeAddress = await signer.getAddress();
+  let wasmtest = await createSeed();
+  console.log("wasmTest : ", wasmtest);
+
+  const chainId = await publicClient.getChainId();
+  console.log("chainId : " + chainId);
+
+  const nodeAddress = walletClient.account.address;
   console.log("nodeaddress : " + nodeAddress + " ready");
-  console.log("Start wasm test");
-  let wasmTest = await createSeed();
-  console.log(wasmTest);
-  const contractAddress = ContractInfos(chainId).VaultFactory.address;
-  const contract = new ethers.Contract(contractAddress, VaultFactoryJson.abi, provider);
 
-  const addTransactionEventListener = new Proxy(arrayOfVaults, {
+  let contractAddress: `0x${string}` = ContractInfos(chainId).VaultFactory
+    .address as `0x${string}`;
+  console.log("contractAddress : " + contractAddress);
+
+  const addNewAddressToArray = (
+    vaultAddress: string,
+    proposedAddresses: string[]
+  ) => {
+    if (proposedAddresses.includes(nodeAddress)) {
+      console.log("add to addresses of vault I'm a part of");
+      addEventListenersForRotationAndTransaction.push(vaultAddress);
+    } else {
+      console.log("add to general addresses I may be a part of in the future");
+      addEventListenersForLaterPotentialAddition.push(vaultAddress);
+    }
+  };
+
+  const subscribeToVaultCreatedEvents = async () => {
+    wsPublicClient.watchContractEvent({
+      address: contractAddress,
+      abi: VaultFactoryJson.abi,
+      eventName: "VaultCreated",
+      onLogs: (logs) => {
+        for (const log of logs) {
+          let anyLog = log as any;
+          eventEmitter.emit("VaultCreated", [
+            anyLog.args.vaultAddress,
+            anyLog.args._proposedAddresses,
+          ]);
+        }
+      },
+    });
+  };
+
+  const listenForNewVaults = async () => {
+    eventEmitter.on("VaultCreated", async (res: any) => {
+      const newVaultAddress = res[0];
+      const proposedAddresses = res[1];
+      console.log("new vault created : " + newVaultAddress);
+      addNewAddressToArray(newVaultAddress, proposedAddresses);
+
+      const isMatch = proposedAddresses.includes(nodeAddress);
+      if (isMatch) {
+        console.log("Node address found in " + newVaultAddress);
+        try {
+          await preRegistration(newVaultAddress, ethersSigner);
+          console.log(
+            "preregistration complete - performing final registration now"
+          );
+          await sleep(sleeptime);
+          await automateRegistration(newVaultAddress, ethersSigner, blockRange);
+          console.log("registering all steps");
+          await sleep(sleeptime);
+          await registerAllSteps(newVaultAddress, ethersSigner);
+          console.log("all steps registered");
+        } catch (error) {
+          console.error(error);
+        }
+      }
+    });
+  };
+
+  await subscribeToVaultCreatedEvents();
+  await listenForNewVaults();
+  const addEventListenersForRotationAndTransaction = new Proxy(arrayOfVaults, {
     set: function (target, property, value) {
       if (value.length > 5) {
         let vaultAddress = value;
-        console.log(arrayOfVaults)
-        const contract = new ethers.Contract(vaultAddress, VaultJson.abi, provider);
         console.log("new transaction event listener for : " + vaultAddress);
 
-      contract.on("TransactionProposed", (txId) => {
-          console.log("signingTx")
-          
-        signTx(vaultAddress, txId, signer, "", blockRange).then(async (res) => {
-            console.log("signing complete");
-          });
-        }),
-          (error:any) => {
-            console.error(error);
-          };
+        wsPublicClient.watchContractEvent({
+          address: vaultAddress,
+          abi: VaultJson.abi,
+          eventName: "TransactionProposed",
+          onLogs: async (logs) => {
+            for (const log of logs) {
+              let anyLog = log as any;
+              console.log("signing tx for : " + vaultAddress);
+              if (anyLog.args) {
+                try {
+                  console.log(anyLog.args.txId);
+                  await signTx(vaultAddress, anyLog.args.txId, ethersSigner);
+                  console.log("signing complete");
+                } catch (error) {
+                  console.error(error);
+                }
+              }
+            }
+          },
+        });
+
+        console.log("new vault user listener for : " + vaultAddress);
+
+        wsPublicClient.watchContractEvent({
+          address: vaultAddress,
+          abi: VaultJson.abi,
+          eventName: "VaultAddUserRequested",
+          onLogs: async () => {
+            await sleep(1000);
+            let userToAdd = await getProposedUser(vaultAddress, ethersProvider);
+            if (userToAdd.includes(nodeAddress)) {
+              try {
+                await sleep(sleeptime);
+                await preRegistration(vaultAddress, ethersSigner);
+                await sleep(sleeptime);
+                console.log("robotautoregistering - add user requested");
+                await automateRotateRegistration(
+                  vaultAddress,
+                  ethersSigner,
+                  blockRange
+                );
+                console.log("done with automate rotate reg1");
+                await registerAllReshareSteps(vaultAddress, ethersSigner);
+                console.log("done with register all reshare steps");
+              } catch (error) {
+                console.error("Error occurred:", error);
+              }
+            } else {
+              await sleep(5000);
+              console.log("robotautoregistering - add user requested");
+              try {
+                await automateRotateRegistration(vaultAddress, ethersSigner);
+                console.log("done with automate rotate reg2");
+                await registerAllReshareSteps(vaultAddress, ethersSigner);
+                console.log("done with register all reshare steps");
+              } catch (error) {
+                console.error(error);
+              }
+            }
+          },
+        });
+
+        console.log("new vault rotate user listener for : " + vaultAddress);
+
+        wsPublicClient.watchContractEvent({
+          address: vaultAddress,
+          abi: VaultJson.abi,
+          eventName: "VaultRotateUserRequested",
+          onLogs: async (logs) => {
+            for (const log of logs) {
+              let anyLog = log as any;
+              if (
+                anyLog &&
+                nodeAddress !== anyLog.args.userToRemove &&
+                anyLog.args.userToAdd
+              ) {
+                try {
+                  const result = await keepCheckingUntilTrue(
+                    vaultAddress,
+                    anyLog.args.userToAdd
+                  );
+                  if (result) {
+                    await sleep(sleeptime);
+                    try {
+                      console.log(
+                        "robotautoregistering - rotate user requested"
+                      );
+                      await automateRotateRegistration(
+                        vaultAddress,
+                        ethersSigner
+                      );
+                      console.log("done with automate rotate reg3");
+                      await registerAllReshareSteps(vaultAddress, ethersSigner);
+                      console.log("done with register all reshare steps");
+                    } catch (error) {
+                      console.log(error);
+                    }
+                  }
+                } catch (error) {
+                  console.error("Error occurred:", error);
+                }
+              }
+            }
+          },
+        });
       }
-      //target[property] = value;
       return true;
     },
   });
 
-  //setup transaction event listeners as soon as as the node is created
-  getFilteredUserInitializedLogs(nodeAddress, provider).then((res) => {
-    if (res && res.length > 0) {
-      //console.log(res.length);
-      //console.log(res);
-      addTransactionEventListener.push(res[res.length - 1]);
-    }
-  });
+  const addEventListenersForLaterPotentialAddition = new Proxy(arrayOfVaults, {
+    set: function (target, property, value) {
+      if (value.length > 5) {
+        let vaultAddress = value;
+        console.log("new vault add user listener for vault : " + vaultAddress);
 
-
-
-  contract.on("VaultCreated", (vaultAddress, proposedAddresses) => {
-    //create new event listener to sign transactions
-    console.log("new vault created : " + vaultAddress);
-    if(proposedAddresses.includes(nodeAddress)) {
-      console.log("add to addresses of vault I'm a part of")
-      addTransactionEventListener.push(vaultAddress);
-    }
-      getVault(vaultAddress, provider, blockRange).then(async (result) => {
-        let users = result.users;
-        const nodeUser = users.find(user => user.address === nodeAddress);
-        if (nodeUser) {
-          console.log("Node user found");
-          preRegistration(vaultAddress, signer)
-            .then(async () => {
-          console.log("preregistration complete");
-            const result = await keepCheckingUntilTrue(vaultAddress, nodeUser.address);
-            if (result) {
-            console.log("robotautoregistering - initial registration");
-            const latestBlock = await provider.getBlockNumber();
-            await sleep(blockTime);
-            await automateRegistration(vaultAddress, nodeAddress, signer, blockRange).then(async (result) => {
-              console.log("registering all steps");
-              await registerAllSteps(vaultAddress, signer);
-            });
+        wsPublicClient.watchContractEvent({
+          address: vaultAddress,
+          abi: VaultJson.abi,
+          eventName: "VaultAddUserRequested",
+          onLogs: async () => {
+            await sleep(sleeptime);
+            let userToAdd = await getProposedUser(vaultAddress, ethersProvider);
+            console.log("proposed user(s) : " + String(userToAdd));
+            if (userToAdd.includes(nodeAddress)) {
+              try {
+                await preRegistration(vaultAddress, ethersSigner);
+                await sleep(sleeptime);
+                console.log("robotautoregistering - add user requested");
+                await automateRotateRegistration(
+                  vaultAddress,
+                  ethersSigner,
+                  blockRange
+                );
+                console.log("Done with automate rotate reg4");
+                await registerAllReshareSteps(vaultAddress, ethersSigner);
+                console.log("Done with register all reshare steps");
+              } catch (error) {
+                console.error("Error occurred:", error);
+              }
             }
-            })
-            .catch((error) => {
-          console.error(error);
-            });
-        }
-      });
-  }),
-    (error:any) => {
-      console.error(error);
-    };
+          },
+        });
+      }
+      return true;
+    },
+  });
+  const logs = await getFilteredUserInitializedLogs(
+    nodeAddress,
+    ethersProvider,
+    blockRange
+  );
+  if (logs && logs.length > 0) {
+    addEventListenersForRotationAndTransaction.push(logs[logs.length - 1]);
+  }
 })();
