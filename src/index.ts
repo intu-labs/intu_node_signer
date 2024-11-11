@@ -1,6 +1,5 @@
-import { createPublicClient, createWalletClient, http, webSocket } from "viem";
-import { arbitrumSepolia, arbitrum } from "viem/chains";
-import { privateKeyToAccount } from "viem/accounts";
+
+import { getSocketRpcClient, getWebSocketRpcClient } from "viem/utils";
 import {
   preRegistration,
   automateRegistration,
@@ -12,54 +11,68 @@ import {
   registerAllReshareSteps,
   getProposedUser,
   createSeed,
+  getVaults,
 } from "@intuweb3/exp-node";
-import VaultFactoryJson from "@intuweb3/exp-node/services/web3/contracts/abi/VaultFactory.json";
-import VaultJson from "@intuweb3/exp-node/services/web3/contracts/abi/Vault.json";
-import ContractInfos from "@intuweb3/exp-node/services/web3/contracts/contractInfos.js";
+import VaultFactoryJson from "@intuweb3/exp-node/lib/services/web3/contracts/abi/VaultFactory.json";
+import VaultJson from "@intuweb3/exp-node/lib/services/web3/contracts/abi/Vault.json";
+import ContractInfos from "@intuweb3/exp-node/lib/services/web3/contracts/contractInfos.js";
 import "dotenv/config";
 import { ethers } from "ethers";
+import {sleep, createSigner,publicClient,wsPublicClient,walletClient,viemAccount} from "./functions";
+import {eventEmitter, expressApp,ethersProvider,rpcURL,wsURL,special,arrayOfVaults,blockRange,sleeptime, PORT} from "./constants";
+import healthRoute from "./routes/healthRoute"; 
+import listVaultsRoute from "./routes/listVaultsRoute"; 
+import restartAutoRegisterRoute from "./routes/restartAutoRegisterRoute"; 
+import combineRoute from "./routes/combineRoute";
+import signRoute from "./routes/signRoute";
 
-const EventEmitter = require("events");
-const eventEmitter = new EventEmitter();
-const sleeptime = 1500;
-let blockRange = 100000;
-let arrayOfVaults: any[] = [];
-let special: `0x${string}` = `0x${process.env.SIGNER}`;
-let rpcURL = `https://arbitrum-sepolia.infura.io/v3/${process.env.INFURA_KEY}`;
-let wsURL = `wss://arbitrum-sepolia.infura.io/ws/v3/${process.env.INFURA_KEY}`;
-//let rpcURL = `https://arbitrum-mainnet.infura.io/v3/${process.env.INFURA_KEY}`;
+expressApp.use("/", healthRoute);
+expressApp.use("/", listVaultsRoute);
+expressApp.use("/", restartAutoRegisterRoute);
+expressApp.use("/", combineRoute);
+expressApp.use("/", signRoute);
+/**** 
+ * 
+ * Setup your own custom logic for your node signer.
+ * Add your own Routes to the routes folder and import them here! 
+ * 
+ * ****/
 
-const publicClient = createPublicClient({
-  chain: arbitrumSepolia,
-  transport: http(rpcURL),
+expressApp.listen(PORT, () => {
+  console.log(`Server is running on port ${PORT}`);
 });
 
-const wsPublicClient = createPublicClient({
-  chain: arbitrumSepolia,
-  transport: webSocket(wsURL),
-});
 
-const account = privateKeyToAccount(special);
-let walletClient = createWalletClient({
-  account,
-  chain: arbitrumSepolia,
-  transport: http(rpcURL),
-});
-
-const ethersProvider = new ethers.providers.StaticJsonRpcProvider({
-  url: rpcURL,
-  skipFetchSetup: true,
-});
-
-function sleep(delay: number) {
-  return new Promise((resolve) => setTimeout(resolve, delay));
+if (wsPublicClient.transport.type === "webSocket") {
+  getWebSocketRpcClient(wsURL).then((client) => {
+    console.log("HERE!!!");
+    const socket = client.socket;
+    socket.addEventListener("close", (e) => {
+      console.error("websocket closed", e);
+    });
+    socket.addEventListener("error", (e) => {
+      console.error("websocket error", e);
+    });
+    socket.addEventListener("open", () => {
+      console.log("websocket open");
+    });
+    socket.addEventListener("message", (thing) => {
+      console.log("websocket message");
+      let messageTime = new Date().getTime();
+      console.log(messageTime);
+    });
+  });
 }
 
-async function createSigner(key: string): Promise<ethers.Signer> {
-  const wallet = new ethers.Wallet(key);
-  const signer = await wallet.connect(ethersProvider);
-  return signer;
-}
+//wsPublicClient.watchBlocks({
+//  emitOnBegin: true,
+//  onBlock: async (block) => {
+//    console.log("wsclient: ", block);
+//  },
+//  pollingInterval: 60000,
+//});
+
+
 
 async function keepCheckingUntilTrue(
   vaultAddress: string,
@@ -68,31 +81,33 @@ async function keepCheckingUntilTrue(
   let retries = 0;
   let maxRetries = 30;
   while (retries < maxRetries) {
-    let done: boolean = false;
-    while (!done) {
-      await sleep(sleeptime);
-      try {
-        const result = await getUserPreRegisterInfos(
-          vaultAddress,
-          userAddress,
-          ethersProvider
-        );
-        if (result && result.registered) {
-          done = true;
-        }
-        retries++;
-      } catch (err) {
-        console.log(err);
+    try {
+      const result = await getUserPreRegisterInfos(
+        vaultAddress,
+        userAddress,
+        ethersProvider
+      );
+
+      if (result && result.registered) {
+        return true; // Successfully registered
       }
+
+      await sleep(sleeptime);
+      console.log("waiting for new user to preregister");
+      retries++;
+    } catch (err) {
+      console.log(err);
+      retries++;
     }
-    return done;
   }
-  return false;
+
+  return false; // Max retries reached without success
 }
 
 (async () => {
   const ethersSigner = await createSigner(
-    process.env.SIGNER || "0x0000000000000000000000000000000000000000"
+    process.env.SIGNER || "0x0000000000000000000000000000000000000000",
+    ethersProvider
   );
 
   let wasmtest = await createSeed();
@@ -101,7 +116,7 @@ async function keepCheckingUntilTrue(
   const chainId = await publicClient.getChainId();
   console.log("chainId : " + chainId);
 
-  const nodeAddress = walletClient.account.address;
+  const nodeAddress = walletClient().account.address;
   console.log("nodeaddress : " + nodeAddress + " ready");
 
   let contractAddress: `0x${string}` = ContractInfos(chainId).VaultFactory
@@ -126,6 +141,10 @@ async function keepCheckingUntilTrue(
       address: contractAddress,
       abi: VaultFactoryJson.abi,
       eventName: "VaultCreated",
+      onError: (error) => {
+        console.log("vaultCreatedError");
+        console.log(error);
+      },
       onLogs: (logs) => {
         for (const log of logs) {
           let anyLog = log as any;
@@ -154,11 +173,25 @@ async function keepCheckingUntilTrue(
             "preregistration complete - performing final registration now"
           );
           await sleep(sleeptime);
-          await automateRegistration(newVaultAddress, ethersSigner, blockRange);
-          console.log("registering all steps");
-          await sleep(sleeptime);
-          await registerAllSteps(newVaultAddress, ethersSigner);
-          console.log("all steps registered");
+          try {
+            const result = await keepCheckingUntilTrue(
+              newVaultAddress,
+              proposedAddresses[2]
+            );
+            if (result) {
+              await automateRegistration(
+                newVaultAddress,
+                ethersSigner,
+                blockRange
+              );
+              console.log("registering all steps");
+              await sleep(sleeptime);
+              await registerAllSteps(newVaultAddress, ethersSigner);
+              console.log("all steps registered");
+            }
+          } catch (error) {
+            console.error(error);
+          }
         } catch (error) {
           console.error(error);
         }
@@ -178,6 +211,10 @@ async function keepCheckingUntilTrue(
           address: vaultAddress,
           abi: VaultJson.abi,
           eventName: "TransactionProposed",
+          onError: (error) => {
+            console.log("transactionproposederror");
+            console.log(error);
+          },
           onLogs: async (logs) => {
             for (const log of logs) {
               let anyLog = log as any;
@@ -236,7 +273,7 @@ async function keepCheckingUntilTrue(
           },
         });
 
-        console.log("new vault rotate user listener for : " + vaultAddress);
+        //console.log("new vault rotate user listener for : " + vaultAddress);
 
         wsPublicClient.watchContractEvent({
           address: vaultAddress,
@@ -321,12 +358,16 @@ async function keepCheckingUntilTrue(
       return true;
     },
   });
+
   const logs = await getFilteredUserInitializedLogs(
     nodeAddress,
     ethersProvider,
     blockRange
   );
+
   if (logs && logs.length > 0) {
-    addEventListenersForRotationAndTransaction.push(logs[logs.length - 1]);
+    for (const log of logs) {
+      addEventListenersForRotationAndTransaction.push(log);
+    }
   }
 })();

@@ -1,8 +1,7 @@
 const path = require('path');
 const webpack = require('webpack');
-const Dotenv = require('dotenv-webpack');
 module.exports = {
-  target:"node",
+    target:"node",
   entry: './src/index.ts',
   mode:"production", 
   module: {
@@ -24,7 +23,7 @@ module.exports = {
         "path": require.resolve("path-browserify"),
         "crypto": require.resolve("crypto-browserify"),
         "stream": require.resolve("stream-browserify"),
-        "buffer": require.resolve("buffer-browserify"),
+        "buffer": require.resolve("buffer"),
         "os": require.resolve("os-browserify/browser"),
         "vm": require.resolve("vm-browserify"),
         "assert": require.resolve("assert-browserify"),
@@ -42,7 +41,6 @@ module.exports = {
     "utf-8-validate": "utf-8-validate",
   },
   plugins: [
-    new Dotenv(),
     new webpack.ProvidePlugin({
       TextDecoder: ['util', 'TextDecoder'],
       TextEncoder: ['util', 'TextEncoder'],
