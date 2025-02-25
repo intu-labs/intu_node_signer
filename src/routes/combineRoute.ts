@@ -2,7 +2,7 @@ import express from "express";
 import { sleep, createSigner } from "../functions";
 import { combineSignedTx } from "@intuweb3/exp-node";
 
-import { ethersProvider } from "../constants";
+import { ethersArbitrumProvider } from "../constants";
 
 const router: express.Router = express.Router();
 
@@ -12,7 +12,7 @@ router.get("/combinesignedtx", async (req: any, res: any) => {
   const txId = req.query.txId;
   const ethersSigner = await createSigner(
     process.env.SIGNER || "0x0000000000000000000000000000000000000000",
-    ethersProvider
+    ethersArbitrumProvider
   );
 
   console.log("combining tx for : " + vaultAddress);
